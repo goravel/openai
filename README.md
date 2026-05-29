@@ -6,7 +6,7 @@ The OpenAI provider for `facades.AI()` of Goravel.
 
 | goravel/openai | goravel/framework |
 |----------------|-------------------|
-| v1.17.x        | v1.17.x           |
+| v1.18.x        | v1.18.x           |
 
 ## Install
 

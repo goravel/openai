@@ -6,54 +6,54 @@ import (
 	"github.com/goravel/framework/packages"
 	"github.com/goravel/framework/packages/match"
 	"github.com/goravel/framework/packages/modify"
-	"github.com/goravel/framework/support/env"
 	"github.com/goravel/framework/support/path"
 )
 
 func main() {
 	setup := packages.Setup(os.Args)
 	aiConfigPath := path.Config("ai.go")
-	appConfigPath := path.Config("app.go")
 	moduleImport := setup.Paths().Module().Import()
 	serviceProvider := "&openai.ServiceProvider{}"
 	aiProviderContract := "github.com/goravel/framework/contracts/ai"
 	openAIFacadesImport := moduleImport + "/facades"
-	via := `func() (ai.Provider, error) {
+	provider := `map[string]any{
+		"key": config.Env("OPENAI_API_KEY", ""),
+		"models": map[string]any{
+			"text": map[string]any{
+				"default": "",
+			},
+			"audio": map[string]any{
+				"default": "",
+			},
+			"transcription": map[string]any{
+				"default": "",
+			},
+			"image": map[string]any{
+				"default": "",
+			},
+		},
+		"url": config.Env("OPENAI_API_URL", ""),
+		"via": func() (ai.Provider, error) {
 			return openaifacades.OpenAI("openai")
-		}`
-	openAIProviderConfig := match.Config("ai.providers.openai")
+		},
+	}`
+	aiProvidersConfig := match.Config("ai.providers")
 
 	setup.Install(
-		modify.When(func(_ map[string]any) bool {
-			return !env.IsBootstrapSetup()
-		}, modify.GoFile(appConfigPath).
-			Find(match.Imports()).Modify(modify.AddImport(moduleImport)).
-			Find(match.Providers()).Modify(modify.Register(serviceProvider))),
-
-		modify.When(func(_ map[string]any) bool {
-			return env.IsBootstrapSetup()
-		}, modify.RegisterProvider(moduleImport, serviceProvider)),
+		modify.RegisterProvider(moduleImport, serviceProvider),
 
 		modify.GoFile(aiConfigPath).Find(match.Imports()).Modify(
 			modify.AddImport(aiProviderContract),
 			modify.AddImport(openAIFacadesImport, "openaifacades"),
-		).Find(openAIProviderConfig).Modify(modify.AddConfig("via", via)),
+		).Find(aiProvidersConfig).Modify(modify.AddConfig("openai", provider)),
 	).Uninstall(
 		modify.WhenFileExists(aiConfigPath, modify.GoFile(aiConfigPath).
-			Find(openAIProviderConfig).Modify(modify.ReplaceConfig("via", `""`)).
+			Find(aiProvidersConfig).Modify(modify.RemoveConfig("openai")).
 			Find(match.Imports()).Modify(
 			modify.RemoveImport(aiProviderContract),
 			modify.RemoveImport(openAIFacadesImport, "openaifacades"),
 		)),
 
-		modify.When(func(_ map[string]any) bool {
-			return !env.IsBootstrapSetup()
-		}, modify.GoFile(appConfigPath).
-			Find(match.Providers()).Modify(modify.Unregister(serviceProvider)).
-			Find(match.Imports()).Modify(modify.RemoveImport(moduleImport))),
-
-		modify.When(func(_ map[string]any) bool {
-			return env.IsBootstrapSetup()
-		}, modify.UnregisterProvider(moduleImport, serviceProvider)),
+		modify.UnregisterProvider(moduleImport, serviceProvider),
 	).Execute()
 }
