@@ -34,4 +34,4 @@ Run the live OpenAI smoke test with a real API key:
 OPENAI_API_KEY=your-key go test -run '^TestProviderPromptIntegration$' -v ./...
 ```
 
-Set `OPENAI_MODEL` to override the integration test model. The smoke test skips automatically when `OPENAI_API_KEY` is not set.
+The smoke test skips automatically when `OPENAI_API_KEY` is not set.
