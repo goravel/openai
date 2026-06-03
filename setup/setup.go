@@ -16,6 +16,10 @@ func main() {
 	serviceProvider := "&openai.ServiceProvider{}"
 	aiProviderContract := "github.com/goravel/framework/contracts/ai"
 	openAIFacadesImport := moduleImport + "/facades"
+	env := `
+OPENAI_API_KEY=
+OPENAI_BASE_URL=
+`
 	provider := `map[string]any{
 		"key": config.Env("OPENAI_API_KEY", ""),
 		"models": map[string]any{
@@ -32,7 +36,7 @@ func main() {
 				"default": "",
 			},
 		},
-		"url": config.Env("OPENAI_API_URL", ""),
+		"url": config.Env("OPENAI_BASE_URL", ""),
 		"via": func() (ai.Provider, error) {
 			return openaifacades.OpenAI("openai")
 		},
@@ -46,6 +50,9 @@ func main() {
 			modify.AddImport(aiProviderContract),
 			modify.AddImport(openAIFacadesImport, "openaifacades"),
 		).Find(aiProvidersConfig).Modify(modify.AddConfig("openai", provider)),
+
+		modify.WhenFileExists(path.Base(".env"), modify.WhenFileNotContains(path.Base(".env"), "OPENAI_API_KEY", modify.File(path.Base(".env")).Append(env))),
+		modify.WhenFileExists(path.Base(".env.example"), modify.WhenFileNotContains(path.Base(".env.example"), "OPENAI_API_KEY", modify.File(path.Base(".env.example")).Append(env))),
 	).Uninstall(
 		modify.WhenFileExists(aiConfigPath, modify.GoFile(aiConfigPath).
 			Find(aiProvidersConfig).Modify(modify.RemoveConfig("openai")).
