@@ -21,8 +21,8 @@ func TestProviderPromptIntegration(t *testing.T) {
 	}
 
 	mockConfig := mocksconfig.NewConfig(t)
-	mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(providerConfig)).RunAndReturn(func(_ string, rawVal any) error {
-		cfg := rawVal.(*providerConfig)
+	mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(contractsai.ProviderConfig)).RunAndReturn(func(_ string, rawVal any) error {
+		cfg := rawVal.(*contractsai.ProviderConfig)
 		cfg.Key = apiKey
 		return nil
 	}).Once()

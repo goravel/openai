@@ -144,15 +144,15 @@ func TestNewOpenAIUnmarshalError(t *testing.T) {
 		{
 			name: "returns unmarshal error",
 			setup: func() {
-				mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(providerConfig)).Return(assert.AnError).Once()
+				mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(contractsai.ProviderConfig)).Return(assert.AnError).Once()
 			},
 			expectErr: assert.AnError,
 		},
 		{
 			name: "sets default text model",
 			setup: func() {
-				mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(providerConfig)).RunAndReturn(func(_ string, rawVal any) error {
-					cfg := rawVal.(*providerConfig)
+				mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(contractsai.ProviderConfig)).RunAndReturn(func(_ string, rawVal any) error {
+					cfg := rawVal.(*contractsai.ProviderConfig)
 					cfg.Key = "test-key"
 					cfg.Url = "http://localhost:1234"
 					return nil
@@ -170,8 +170,8 @@ func TestNewOpenAIUnmarshalError(t *testing.T) {
 		{
 			name: "keeps configured default models",
 			setup: func() {
-				mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(providerConfig)).RunAndReturn(func(_ string, rawVal any) error {
-					cfg := rawVal.(*providerConfig)
+				mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(contractsai.ProviderConfig)).RunAndReturn(func(_ string, rawVal any) error {
+					cfg := rawVal.(*contractsai.ProviderConfig)
 					cfg.Key = "test-key"
 					cfg.Models.Text.Default = "gpt-custom"
 					cfg.Models.Image.Default = "gpt-image-custom"
@@ -211,8 +211,8 @@ func TestNewOpenAIUnmarshalError(t *testing.T) {
 func TestNewOpenAIFailoverRules(t *testing.T) {
 	t.Run("compiles configured failover rules", func(t *testing.T) {
 		mockConfig := mocksconfig.NewConfig(t)
-		mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(providerConfig)).RunAndReturn(func(_ string, rawVal any) error {
-			cfg := rawVal.(*providerConfig)
+		mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(contractsai.ProviderConfig)).RunAndReturn(func(_ string, rawVal any) error {
+			cfg := rawVal.(*contractsai.ProviderConfig)
 			cfg.Key = "test-key"
 			cfg.Failover = map[contractsai.FailoverReason][]string{
 				"context_length_exceeded": {"context length"},
@@ -224,13 +224,16 @@ func TestNewOpenAIFailoverRules(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, provider)
-		assert.True(t, provider.hasFailoverRules)
+		require.NotNil(t, provider.failoverRules)
+		reason, ok := provider.failoverRules.Match(providerTestError("maximum context length exceeded"))
+		assert.True(t, ok)
+		assert.Equal(t, contractsai.FailoverReason("context_length_exceeded"), reason)
 	})
 
 	t.Run("returns invalid regex errors", func(t *testing.T) {
 		mockConfig := mocksconfig.NewConfig(t)
-		mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(providerConfig)).RunAndReturn(func(_ string, rawVal any) error {
-			cfg := rawVal.(*providerConfig)
+		mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(contractsai.ProviderConfig)).RunAndReturn(func(_ string, rawVal any) error {
+			cfg := rawVal.(*contractsai.ProviderConfig)
 			cfg.Failover = map[contractsai.FailoverReason][]string{
 				"bad_pattern": {"/[/"},
 			}
@@ -304,7 +307,7 @@ func TestProviderFailoverError(t *testing.T) {
 		"context_length_exceeded": {"context length"},
 	})
 	require.NoError(t, err)
-	provider = &Provider{name: "openai-primary", failoverRules: rules, hasFailoverRules: true}
+	provider = &Provider{name: "openai-primary", failoverRules: &rules}
 	err = provider.failoverError(customErr)
 	var failoverErr contractsai.FailoverError
 	require.ErrorAs(t, err, &failoverErr)
