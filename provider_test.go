@@ -287,6 +287,8 @@ func TestProviderFailoverError(t *testing.T) {
 
 			var failoverErr contractsai.FailoverError
 			require.ErrorAs(t, err, &failoverErr)
+			var openAIFailoverErr *failoverError
+			require.ErrorAs(t, err, &openAIFailoverErr)
 			assert.Equal(t, tt.expectReason, failoverErr.Reason())
 			if tt.providerName == "" {
 				assert.Equal(t, "openai", failoverErr.Provider())
@@ -311,6 +313,8 @@ func TestProviderFailoverError(t *testing.T) {
 	err = provider.failoverError(customErr)
 	var failoverErr contractsai.FailoverError
 	require.ErrorAs(t, err, &failoverErr)
+	var openAIFailoverErr *failoverError
+	require.ErrorAs(t, err, &openAIFailoverErr)
 	assert.Equal(t, contractsai.FailoverReason("context_length_exceeded"), failoverErr.Reason())
 	assert.Equal(t, "openai-primary", failoverErr.Provider())
 	assert.ErrorIs(t, err, customErr)

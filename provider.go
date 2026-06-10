@@ -42,6 +42,14 @@ type Provider struct {
 	name          string
 }
 
+type failoverError struct {
+	provider string
+	reason   contractsai.FailoverReason
+	cause    error
+}
+
+var _ contractsai.FailoverError = (*failoverError)(nil)
+
 func NewOpenAI(config contractsconfig.Config, provider string) (*Provider, error) {
 	var providerConfig contractsai.ProviderConfig
 	err := config.UnmarshalKey("ai.providers."+provider, &providerConfig)
@@ -341,29 +349,61 @@ func (r *Provider) DeleteFile(ctx context.Context, id string) error {
 }
 
 func (r *Provider) failoverError(err error) error {
-	if r.failoverRules != nil {
-		wrappedErr := r.failoverRules.Wrap(r.providerName(), err)
-		var failoverErr contractsai.FailoverError
-		if errors.As(wrappedErr, &failoverErr) {
-			return wrappedErr
+	var apiErr *goopenai.Error
+	if errors.As(err, &apiErr) {
+		switch {
+		case apiErr.StatusCode == http.StatusTooManyRequests:
+			return newFailoverError(r.providerName(), contractsai.FailoverReasonRateLimited, err)
+		case apiErr.StatusCode == http.StatusPaymentRequired:
+			return newFailoverError(r.providerName(), contractsai.FailoverReasonInsufficientCredits, err)
+		case apiErr.StatusCode >= http.StatusInternalServerError:
+			return newFailoverError(r.providerName(), contractsai.FailoverReasonProviderOverloaded, err)
 		}
 	}
 
-	var apiErr *goopenai.Error
-	if !errors.As(err, &apiErr) {
-		return err
+	if r.failoverRules != nil {
+		if reason, ok := r.failoverRules.Match(err); ok {
+			return newFailoverError(r.providerName(), reason, err)
+		}
 	}
 
-	switch {
-	case apiErr.StatusCode == http.StatusTooManyRequests:
-		return frameworkai.NewFailoverError(r.providerName(), contractsai.FailoverReasonRateLimited, err)
-	case apiErr.StatusCode == http.StatusPaymentRequired:
-		return frameworkai.NewFailoverError(r.providerName(), contractsai.FailoverReasonInsufficientCredits, err)
-	case apiErr.StatusCode >= http.StatusInternalServerError:
-		return frameworkai.NewFailoverError(r.providerName(), contractsai.FailoverReasonProviderOverloaded, err)
+	return err
+}
+
+func newFailoverError(provider string, reason contractsai.FailoverReason, cause error) error {
+	return &failoverError{provider: provider, reason: reason, cause: cause}
+}
+
+func (e *failoverError) Error() string {
+	switch e.reason {
+	case contractsai.FailoverReasonRateLimited:
+		return fmt.Sprintf("openai: provider %s was rate limited", e.provider)
+	case contractsai.FailoverReasonInsufficientCredits:
+		return fmt.Sprintf("openai: provider %s has insufficient credits", e.provider)
+	case contractsai.FailoverReasonProviderOverloaded:
+		return fmt.Sprintf("openai: provider %s is overloaded", e.provider)
 	default:
-		return err
+		if e.reason != "" {
+			return fmt.Sprintf("openai: provider %s failed over because %s", e.provider, e.reason)
+		}
+		if e.cause != nil {
+			return e.cause.Error()
+		}
+
+		return fmt.Sprintf("openai: provider %s failed over", e.provider)
 	}
+}
+
+func (e *failoverError) Reason() contractsai.FailoverReason {
+	return e.reason
+}
+
+func (e *failoverError) Provider() string {
+	return e.provider
+}
+
+func (e *failoverError) Unwrap() error {
+	return e.cause
 }
 
 func (r *Provider) providerName() string {
