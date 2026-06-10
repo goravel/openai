@@ -249,7 +249,43 @@ func TestNewOpenAIFailoverRules(t *testing.T) {
 
 func TestProviderFailoverError(t *testing.T) {
 	provider := &Provider{name: "openai-primary"}
-	nonFailoverErr := &goopenai.Error{StatusCode: http.StatusTooManyRequests}
+
+	defaultCases := []struct {
+		name       string
+		statusCode int
+		reason     contractsai.FailoverReason
+	}{
+		{
+			name:       "rate limited",
+			statusCode: http.StatusTooManyRequests,
+			reason:     contractsai.FailoverReasonRateLimited,
+		},
+		{
+			name:       "insufficient credits",
+			statusCode: http.StatusPaymentRequired,
+			reason:     contractsai.FailoverReasonInsufficientCredits,
+		},
+		{
+			name:       "provider overloaded",
+			statusCode: http.StatusServiceUnavailable,
+			reason:     contractsai.FailoverReasonProviderOverloaded,
+		},
+	}
+
+	for _, tt := range defaultCases {
+		t.Run(tt.name, func(t *testing.T) {
+			openaiErr := &goopenai.Error{StatusCode: tt.statusCode}
+			err := provider.failoverError(openaiErr)
+
+			var failoverErr contractsai.FailoverError
+			require.ErrorAs(t, err, &failoverErr)
+			assert.Equal(t, tt.reason, failoverErr.Reason())
+			assert.Equal(t, "openai-primary", failoverErr.Provider())
+			assert.ErrorIs(t, err, openaiErr)
+		})
+	}
+
+	nonFailoverErr := &goopenai.Error{StatusCode: http.StatusBadRequest}
 	assert.Same(t, nonFailoverErr, provider.failoverError(nonFailoverErr))
 	assert.Equal(t, assert.AnError, provider.failoverError(assert.AnError))
 
@@ -324,7 +360,6 @@ func TestProviderImage(t *testing.T) {
 		expectMime           string
 		expectContent        []byte
 		expectFailoverReason contractsai.FailoverReason
-		failoverPattern      string
 	}{
 		{
 			name: "generates image with defaults",
@@ -390,8 +425,7 @@ func TestProviderImage(t *testing.T) {
 			},
 			status:               http.StatusTooManyRequests,
 			response:             `{"error":{"message":"rate limited","type":"rate_limit_error"}}`,
-			expectFailoverReason: contractsai.FailoverReason("openai_rate_limited"),
-			failoverPattern:      "rate limited",
+			expectFailoverReason: contractsai.FailoverReasonRateLimited,
 		},
 		{
 			name:        "returns error for empty prompt",
@@ -416,9 +450,6 @@ func TestProviderImage(t *testing.T) {
 
 			provider := &Provider{client: goopenai.NewClient(option.WithAPIKey("test-key"), option.WithBaseURL(server.URL))}
 			provider.config.Models.Image.Default = "gpt-image-default"
-			if tt.expectFailoverReason != "" {
-				provider.failoverRules = failoverRulesForTest(t, tt.expectFailoverReason, tt.failoverPattern)
-			}
 
 			response, err := provider.Image(context.Background(), tt.prompt)
 			if tt.expectFailoverReason != "" {
@@ -464,7 +495,6 @@ func TestProviderAudio(t *testing.T) {
 		expectMime           string
 		expectContent        []byte
 		expectFailoverReason contractsai.FailoverReason
-		failoverPattern      string
 	}{
 		{
 			name: "generates audio with defaults",
@@ -546,8 +576,7 @@ func TestProviderAudio(t *testing.T) {
 			status:               http.StatusPaymentRequired,
 			responseBody:         `{"error":{"message":"insufficient credits","type":"billing_error"}}`,
 			responseType:         "application/json",
-			expectFailoverReason: contractsai.FailoverReason("openai_insufficient_credits"),
-			failoverPattern:      "insufficient credits",
+			expectFailoverReason: contractsai.FailoverReasonInsufficientCredits,
 		},
 	}
 
@@ -559,9 +588,6 @@ func TestProviderAudio(t *testing.T) {
 
 			provider := &Provider{client: goopenai.NewClient(option.WithAPIKey("test-key"), option.WithBaseURL(server.URL))}
 			provider.config.Models.Audio.Default = "gpt-audio-default"
-			if tt.expectFailoverReason != "" {
-				provider.failoverRules = failoverRulesForTest(t, tt.expectFailoverReason, tt.failoverPattern)
-			}
 
 			response, err := provider.Audio(context.Background(), tt.prompt)
 			if tt.expectFailoverReason != "" {
@@ -608,7 +634,6 @@ func TestProviderTranscription(t *testing.T) {
 		expectUsage          usageCheck
 		expectSegment        []contractsai.TranscriptionSegment
 		expectFailoverReason contractsai.FailoverReason
-		failoverPattern      string
 	}{
 		{
 			name: "transcribes audio with defaults",
@@ -694,14 +719,13 @@ func TestProviderTranscription(t *testing.T) {
 			expectText: "",
 		},
 		{
-			name: "wraps server errors as failover errors",
+			name: "wraps service unavailable as failover error",
 			prompt: contractsai.TranscriptionPrompt{
 				File: namedAttachment{kind: contractsai.AttachmentKindFile, filename: "call.mp3", mimeType: "audio/mpeg", content: []byte("audio")},
 			},
-			status:               http.StatusInternalServerError,
+			status:               http.StatusServiceUnavailable,
 			responseBody:         `{"error":{"message":"overloaded","type":"server_error"}}`,
-			expectFailoverReason: contractsai.FailoverReason("openai_overloaded"),
-			failoverPattern:      "overloaded",
+			expectFailoverReason: contractsai.FailoverReasonProviderOverloaded,
 		},
 	}
 
@@ -713,9 +737,6 @@ func TestProviderTranscription(t *testing.T) {
 
 			provider := &Provider{client: goopenai.NewClient(option.WithAPIKey("test-key"), option.WithBaseURL(server.URL))}
 			provider.config.Models.Transcription.Default = "gpt-transcription-default"
-			if tt.expectFailoverReason != "" {
-				provider.failoverRules = failoverRulesForTest(t, tt.expectFailoverReason, tt.failoverPattern)
-			}
 
 			response, err := provider.Transcription(context.Background(), tt.prompt)
 			if tt.expectFailoverReason != "" {
@@ -778,7 +799,6 @@ func TestProviderPrompt(t *testing.T) {
 		expectErr            bool
 		expectErrMessage     string
 		expectFailoverReason contractsai.FailoverReason
-		failoverPattern      string
 		expectRequest        normalizedCapturedRequest
 	}{
 		{
@@ -829,8 +849,8 @@ func TestProviderPrompt(t *testing.T) {
 			},
 		},
 		{
-			name:   "returns error when API fails",
-			status: http.StatusInternalServerError,
+			name:   "wraps service unavailable as failover error",
+			status: http.StatusServiceUnavailable,
 			body:   `{"error":{"message":"boom","type":"server_error"}}`,
 			responses: []string{
 				`{"error":{"message":"boom","type":"server_error"}}`,
@@ -844,8 +864,7 @@ func TestProviderPrompt(t *testing.T) {
 			input:                "hello",
 			expectErr:            true,
 			expectErrMessage:     "boom",
-			expectFailoverReason: contractsai.FailoverReason("openai_overloaded"),
-			failoverPattern:      "boom",
+			expectFailoverReason: contractsai.FailoverReasonProviderOverloaded,
 			expectRequest: normalizedCapturedRequest{
 				path:          "/responses",
 				authorization: "Bearer test-key",
@@ -872,9 +891,6 @@ func TestProviderPrompt(t *testing.T) {
 				config: contractsai.ProviderConfig{},
 			}
 			provider.config.Models.Text.Default = "gpt-default"
-			if tt.expectFailoverReason != "" {
-				provider.failoverRules = failoverRulesForTest(t, tt.expectFailoverReason, tt.failoverPattern)
-			}
 
 			tt.setup()
 
@@ -1248,7 +1264,6 @@ func TestProviderStream(t *testing.T) {
 		expectEachErr        bool
 		expectErrMessage     string
 		expectFailoverReason contractsai.FailoverReason
-		failoverPattern      string
 		expectText           string
 		expectUsage          usageCheck
 		expectToolCalls      []contractsai.ToolCall
@@ -1348,13 +1363,12 @@ func TestProviderStream(t *testing.T) {
 		},
 		{
 			name:                 "emits error event when stream request fails",
-			status:               http.StatusInternalServerError,
+			status:               http.StatusServiceUnavailable,
 			contentType:          "application/json",
 			body:                 `{"error":{"message":"boom","type":"server_error"}}`,
 			expectEachErr:        true,
 			expectErrMessage:     "boom",
-			expectFailoverReason: contractsai.FailoverReason("openai_overloaded"),
-			failoverPattern:      "boom",
+			expectFailoverReason: contractsai.FailoverReasonProviderOverloaded,
 			setup: func() {
 				mockAgent.EXPECT().Instructions().Return("").Once()
 				mockAgent.EXPECT().Messages().Return(nil).Once()
@@ -1383,9 +1397,6 @@ func TestProviderStream(t *testing.T) {
 				config: contractsai.ProviderConfig{},
 			}
 			provider.config.Models.Text.Default = "gpt-default"
-			if tt.expectFailoverReason != "" {
-				provider.failoverRules = failoverRulesForTest(t, tt.expectFailoverReason, tt.failoverPattern)
-			}
 
 			tt.setup()
 
@@ -1534,6 +1545,63 @@ func TestProviderDeleteFile(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "/files/file-123", req.path)
 	assert.Equal(t, "Bearer test-key", req.authorization)
+}
+
+func TestProviderFileFailoverError(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		reason     contractsai.FailoverReason
+		run        func(context.Context, *Provider) error
+	}{
+		{
+			name:       "put file rate limited",
+			statusCode: http.StatusTooManyRequests,
+			reason:     contractsai.FailoverReasonRateLimited,
+			run: func(ctx context.Context, provider *Provider) error {
+				_, err := provider.PutFile(ctx, namedAttachment{kind: contractsai.AttachmentKindFile, filename: "report.txt", mimeType: "text/plain", content: []byte("report")})
+				return err
+			},
+		},
+		{
+			name:       "get file insufficient credits",
+			statusCode: http.StatusPaymentRequired,
+			reason:     contractsai.FailoverReasonInsufficientCredits,
+			run: func(ctx context.Context, provider *Provider) error {
+				_, err := provider.GetFile(ctx, "file-123")
+				return err
+			},
+		},
+		{
+			name:       "delete file provider overloaded",
+			statusCode: http.StatusServiceUnavailable,
+			reason:     contractsai.FailoverReasonProviderOverloaded,
+			run: func(ctx context.Context, provider *Provider) error {
+				return provider.DeleteFile(ctx, "file-123")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer errors.Ignore(r.Body.Close)
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.statusCode)
+				_, _ = w.Write([]byte(`{"error":{"message":"provider unavailable","type":"server_error"}}`))
+			}))
+			defer server.Close()
+
+			provider := &Provider{client: goopenai.NewClient(option.WithAPIKey("test-key"), option.WithBaseURL(server.URL))}
+			err := tt.run(context.Background(), provider)
+
+			var failoverErr contractsai.FailoverError
+			require.ErrorAs(t, err, &failoverErr)
+			assert.Equal(t, tt.reason, failoverErr.Reason())
+			assert.Equal(t, "openai", failoverErr.Provider())
+		})
+	}
 }
 
 func newResponsesServer(t *testing.T, status int, responses []string, captured chan<- capturedRequest) *httptest.Server {

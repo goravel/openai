@@ -22,7 +22,15 @@ Or check [the setup file](./setup/setup.go) to install the package manually.
 
 ## Custom Failover
 
-Configure `failover` rules to map OpenAI-specific error messages to Goravel AI failover reasons. Plain strings use substring matching, and slash-delimited strings use Go regular expressions.
+The provider marks these OpenAI HTTP errors as failoverable by default:
+
+| Status | Reason |
+|--------|--------|
+| `429 Too Many Requests` | `rate_limited` |
+| `402 Payment Required` | `insufficient_credits` |
+| `503 Service Unavailable` | `provider_overloaded` |
+
+Configure `failover` rules to add OpenAI-specific error message mappings. Plain strings use substring matching, and slash-delimited strings use Go regular expressions.
 
 ```go
 "openai": map[string]any{

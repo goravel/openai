@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"mime"
@@ -304,7 +305,7 @@ func (r *Provider) PutFile(ctx context.Context, file contractsai.StorableFile) (
 
 	upload, err := r.client.Files.New(ctx, params)
 	if err != nil {
-		return nil, err
+		return nil, r.failoverError(err)
 	}
 
 	return frameworkai.NewFileResponse(upload.ID, "", nil), nil
@@ -313,12 +314,12 @@ func (r *Provider) PutFile(ctx context.Context, file contractsai.StorableFile) (
 func (r *Provider) GetFile(ctx context.Context, id string) (contractsai.FileResponse, error) {
 	file, err := r.client.Files.Get(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, r.failoverError(err)
 	}
 
 	response, err := r.client.Files.Content(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, r.failoverError(err)
 	}
 	defer errors.Ignore(response.Body.Close)
 
@@ -337,10 +338,26 @@ func (r *Provider) GetFile(ctx context.Context, id string) (contractsai.FileResp
 
 func (r *Provider) DeleteFile(ctx context.Context, id string) error {
 	_, err := r.client.Files.Delete(ctx, id)
-	return err
+	if err != nil {
+		return r.failoverError(err)
+	}
+
+	return nil
 }
 
 func (r *Provider) failoverError(err error) error {
+	var openaiErr *goopenai.Error
+	if stderrors.As(err, &openaiErr) {
+		switch openaiErr.StatusCode {
+		case http.StatusTooManyRequests:
+			return frameworkai.NewFailoverError(r.providerName(), contractsai.FailoverReasonRateLimited, err)
+		case http.StatusPaymentRequired:
+			return frameworkai.NewFailoverError(r.providerName(), contractsai.FailoverReasonInsufficientCredits, err)
+		case http.StatusServiceUnavailable:
+			return frameworkai.NewFailoverError(r.providerName(), contractsai.FailoverReasonProviderOverloaded, err)
+		}
+	}
+
 	if r.failoverRules == nil {
 		return err
 	}
