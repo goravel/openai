@@ -36,6 +36,7 @@ OPENAI_BASE_URL=
 				"default": "",
 			},
 		},
+		"failover": map[string][]string{},
 		"url": config.Env("OPENAI_BASE_URL", ""),
 		"via": func() (ai.Provider, error) {
 			return openaifacades.OpenAI("openai")

@@ -20,6 +20,33 @@ This registers the service provider and updates `config/ai.go` so `ai.providers.
 
 Or check [the setup file](./setup/setup.go) to install the package manually.
 
+## Custom Failover
+
+The provider marks these OpenAI HTTP errors as failoverable by default:
+
+| Status | Reason |
+|--------|--------|
+| `429 Too Many Requests` | `rate_limited` |
+| `402 Payment Required` | `insufficient_credits` |
+| `503 Service Unavailable` | `provider_overloaded` |
+
+Configure `failover` rules to add OpenAI-specific error message mappings. Plain strings use substring matching, and slash-delimited strings use Go regular expressions.
+
+```go
+"openai": map[string]any{
+	"key": config.Env("OPENAI_API_KEY", ""),
+	"failover": map[string][]string{
+		"context_length_exceeded": {
+			"maximum context length",
+			"/(?i)context.*length/",
+		},
+	},
+	"via": func() (ai.Provider, error) {
+		return openaifacades.OpenAI("openai")
+	},
+}
+```
+
 ## Testing
 
 Run command below to run all tests:
