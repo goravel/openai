@@ -144,15 +144,15 @@ func TestNewOpenAIUnmarshalError(t *testing.T) {
 		{
 			name: "returns unmarshal error",
 			setup: func() {
-				mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(contractsai.ProviderConfig)).Return(assert.AnError).Once()
+				mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(providerConfig)).Return(assert.AnError).Once()
 			},
 			expectErr: assert.AnError,
 		},
 		{
 			name: "sets default text model",
 			setup: func() {
-				mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(contractsai.ProviderConfig)).RunAndReturn(func(_ string, rawVal any) error {
-					cfg := rawVal.(*contractsai.ProviderConfig)
+				mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(providerConfig)).RunAndReturn(func(_ string, rawVal any) error {
+					cfg := rawVal.(*providerConfig)
 					cfg.Key = "test-key"
 					cfg.Url = "http://localhost:1234"
 					return nil
@@ -170,8 +170,8 @@ func TestNewOpenAIUnmarshalError(t *testing.T) {
 		{
 			name: "keeps configured default models",
 			setup: func() {
-				mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(contractsai.ProviderConfig)).RunAndReturn(func(_ string, rawVal any) error {
-					cfg := rawVal.(*contractsai.ProviderConfig)
+				mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(providerConfig)).RunAndReturn(func(_ string, rawVal any) error {
+					cfg := rawVal.(*providerConfig)
 					cfg.Key = "test-key"
 					cfg.Models.Text.Default = "gpt-custom"
 					cfg.Models.Image.Default = "gpt-image-custom"
@@ -206,6 +206,42 @@ func TestNewOpenAIUnmarshalError(t *testing.T) {
 			assert.Equal(t, "openai", provider.name)
 		})
 	}
+}
+
+func TestNewOpenAIFailoverRules(t *testing.T) {
+	t.Run("compiles configured failover rules", func(t *testing.T) {
+		mockConfig := mocksconfig.NewConfig(t)
+		mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(providerConfig)).RunAndReturn(func(_ string, rawVal any) error {
+			cfg := rawVal.(*providerConfig)
+			cfg.Key = "test-key"
+			cfg.Failover = map[contractsai.FailoverReason][]string{
+				"context_length_exceeded": {"context length"},
+			}
+			return nil
+		}).Once()
+
+		provider, err := NewOpenAI(mockConfig, "openai")
+
+		require.NoError(t, err)
+		require.NotNil(t, provider)
+		assert.True(t, provider.hasFailoverRules)
+	})
+
+	t.Run("returns invalid regex errors", func(t *testing.T) {
+		mockConfig := mocksconfig.NewConfig(t)
+		mockConfig.EXPECT().UnmarshalKey("ai.providers.openai", new(providerConfig)).RunAndReturn(func(_ string, rawVal any) error {
+			cfg := rawVal.(*providerConfig)
+			cfg.Failover = map[contractsai.FailoverReason][]string{
+				"bad_pattern": {"/[/"},
+			}
+			return nil
+		}).Once()
+
+		provider, err := NewOpenAI(mockConfig, "openai")
+
+		assert.Nil(t, provider)
+		assert.ErrorIs(t, err, errors.AIFailoverPatternInvalid)
+	})
 }
 
 func TestProviderFailoverError(t *testing.T) {
@@ -262,6 +298,19 @@ func TestProviderFailoverError(t *testing.T) {
 	provider := &Provider{name: "openai-primary"}
 	assert.Same(t, nonFailoverErr, provider.failoverError(nonFailoverErr))
 	assert.Equal(t, assert.AnError, provider.failoverError(assert.AnError))
+
+	customErr := providerTestError("maximum context length exceeded")
+	rules, err := frameworkai.NewFailoverRules("openai-primary", map[contractsai.FailoverReason][]string{
+		"context_length_exceeded": {"context length"},
+	})
+	require.NoError(t, err)
+	provider = &Provider{name: "openai-primary", failoverRules: rules, hasFailoverRules: true}
+	err = provider.failoverError(customErr)
+	var failoverErr contractsai.FailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	assert.Equal(t, contractsai.FailoverReason("context_length_exceeded"), failoverErr.Reason())
+	assert.Equal(t, "openai-primary", failoverErr.Provider())
+	assert.ErrorIs(t, err, customErr)
 }
 
 func TestProviderResolveTranscriptionModel(t *testing.T) {
@@ -1115,6 +1164,12 @@ func TestProviderBuildInputUnsupportedAttachmentKind(t *testing.T) {
 }
 
 type unsupportedAttachment struct{}
+
+type providerTestError string
+
+func (e providerTestError) Error() string {
+	return string(e)
+}
 
 type providerStateStub struct{ data map[string]any }
 

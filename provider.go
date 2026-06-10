@@ -36,36 +36,54 @@ const DefaultMaleVoice = "ash"
 const providerStateResponseID = "openai.response_id"
 
 type Provider struct {
-	client goopenai.Client
-	config contractsai.ProviderConfig
-	name   string
+	client           goopenai.Client
+	config           contractsai.ProviderConfig
+	failoverRules    frameworkai.FailoverRules
+	hasFailoverRules bool
+	name             string
+}
+
+type providerConfig struct {
+	contractsai.ProviderConfig `json:",squash"`
+	Failover                   map[contractsai.FailoverReason][]string `json:"failover"`
 }
 
 func NewOpenAI(config contractsconfig.Config, provider string) (*Provider, error) {
-	var providerConfig contractsai.ProviderConfig
+	var providerConfig providerConfig
 	err := config.UnmarshalKey("ai.providers."+provider, &providerConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	opts := []option.RequestOption{option.WithAPIKey(providerConfig.Key)}
-	if providerConfig.Url != "" {
-		opts = append(opts, option.WithBaseURL(providerConfig.Url))
-	}
-	if providerConfig.Models.Text.Default == "" {
-		providerConfig.Models.Text.Default = DefaultTextModel
-	}
-	if providerConfig.Models.Audio.Default == "" {
-		providerConfig.Models.Audio.Default = DefaultAudioModel
-	}
-	if providerConfig.Models.Transcription.Default == "" {
-		providerConfig.Models.Transcription.Default = DefaultTranscriptionModel
-	}
-	if providerConfig.Models.Image.Default == "" {
-		providerConfig.Models.Image.Default = DefaultImageModel
+	failoverRules, err := frameworkai.NewFailoverRules(provider, providerConfig.Failover)
+	if err != nil {
+		return nil, err
 	}
 
-	return &Provider{client: goopenai.NewClient(opts...), config: providerConfig, name: provider}, nil
+	opts := []option.RequestOption{option.WithAPIKey(providerConfig.ProviderConfig.Key)}
+	if providerConfig.ProviderConfig.Url != "" {
+		opts = append(opts, option.WithBaseURL(providerConfig.ProviderConfig.Url))
+	}
+	if providerConfig.ProviderConfig.Models.Text.Default == "" {
+		providerConfig.ProviderConfig.Models.Text.Default = DefaultTextModel
+	}
+	if providerConfig.ProviderConfig.Models.Audio.Default == "" {
+		providerConfig.ProviderConfig.Models.Audio.Default = DefaultAudioModel
+	}
+	if providerConfig.ProviderConfig.Models.Transcription.Default == "" {
+		providerConfig.ProviderConfig.Models.Transcription.Default = DefaultTranscriptionModel
+	}
+	if providerConfig.ProviderConfig.Models.Image.Default == "" {
+		providerConfig.ProviderConfig.Models.Image.Default = DefaultImageModel
+	}
+
+	return &Provider{
+		client:           goopenai.NewClient(opts...),
+		config:           providerConfig.ProviderConfig,
+		failoverRules:    failoverRules,
+		hasFailoverRules: hasFailoverPatterns(providerConfig.Failover),
+		name:             provider,
+	}, nil
 }
 
 func (r *Provider) Audio(ctx context.Context, prompt contractsai.AudioPrompt) (contractsai.AudioResponse, error) {
@@ -330,6 +348,14 @@ func (r *Provider) DeleteFile(ctx context.Context, id string) error {
 }
 
 func (r *Provider) failoverError(err error) error {
+	if r.hasFailoverRules {
+		wrappedErr := r.failoverRules.Wrap(r.providerName(), err)
+		var failoverErr contractsai.FailoverError
+		if errors.As(wrappedErr, &failoverErr) {
+			return wrappedErr
+		}
+	}
+
 	var apiErr *goopenai.Error
 	if !errors.As(err, &apiErr) {
 		return err
@@ -353,6 +379,21 @@ func (r *Provider) providerName() string {
 	}
 
 	return "openai"
+}
+
+func hasFailoverPatterns(patterns map[contractsai.FailoverReason][]string) bool {
+	for reason, reasonPatterns := range patterns {
+		if reason == "" {
+			continue
+		}
+		for _, pattern := range reasonPatterns {
+			if pattern != "" {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func (r *Provider) uploadFilename(file contractsai.StorableFile) string {
