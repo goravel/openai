@@ -258,17 +258,17 @@ func TestProviderFailoverError(t *testing.T) {
 		{
 			name:       "rate limited",
 			statusCode: http.StatusTooManyRequests,
-			reason:     contractsai.FailoverReasonRateLimited,
+			reason:     defaultFailoverReasonRateLimited,
 		},
 		{
 			name:       "insufficient credits",
 			statusCode: http.StatusPaymentRequired,
-			reason:     contractsai.FailoverReasonInsufficientCredits,
+			reason:     defaultFailoverReasonInsufficientCredits,
 		},
 		{
 			name:       "provider overloaded",
 			statusCode: http.StatusServiceUnavailable,
-			reason:     contractsai.FailoverReasonProviderOverloaded,
+			reason:     defaultFailoverReasonProviderOverloaded,
 		},
 	}
 
@@ -425,7 +425,7 @@ func TestProviderImage(t *testing.T) {
 			},
 			status:               http.StatusTooManyRequests,
 			response:             `{"error":{"message":"rate limited","type":"rate_limit_error"}}`,
-			expectFailoverReason: contractsai.FailoverReasonRateLimited,
+			expectFailoverReason: defaultFailoverReasonRateLimited,
 		},
 		{
 			name:        "returns error for empty prompt",
@@ -576,7 +576,7 @@ func TestProviderAudio(t *testing.T) {
 			status:               http.StatusPaymentRequired,
 			responseBody:         `{"error":{"message":"insufficient credits","type":"billing_error"}}`,
 			responseType:         "application/json",
-			expectFailoverReason: contractsai.FailoverReasonInsufficientCredits,
+			expectFailoverReason: defaultFailoverReasonInsufficientCredits,
 		},
 	}
 
@@ -725,7 +725,7 @@ func TestProviderTranscription(t *testing.T) {
 			},
 			status:               http.StatusServiceUnavailable,
 			responseBody:         `{"error":{"message":"overloaded","type":"server_error"}}`,
-			expectFailoverReason: contractsai.FailoverReasonProviderOverloaded,
+			expectFailoverReason: defaultFailoverReasonProviderOverloaded,
 		},
 	}
 
@@ -864,7 +864,7 @@ func TestProviderPrompt(t *testing.T) {
 			input:                "hello",
 			expectErr:            true,
 			expectErrMessage:     "boom",
-			expectFailoverReason: contractsai.FailoverReasonProviderOverloaded,
+			expectFailoverReason: defaultFailoverReasonProviderOverloaded,
 			expectRequest: normalizedCapturedRequest{
 				path:          "/responses",
 				authorization: "Bearer test-key",
@@ -1368,7 +1368,7 @@ func TestProviderStream(t *testing.T) {
 			body:                 `{"error":{"message":"boom","type":"server_error"}}`,
 			expectEachErr:        true,
 			expectErrMessage:     "boom",
-			expectFailoverReason: contractsai.FailoverReasonProviderOverloaded,
+			expectFailoverReason: defaultFailoverReasonProviderOverloaded,
 			setup: func() {
 				mockAgent.EXPECT().Instructions().Return("").Once()
 				mockAgent.EXPECT().Messages().Return(nil).Once()
@@ -1557,7 +1557,7 @@ func TestProviderFileFailoverError(t *testing.T) {
 		{
 			name:       "put file rate limited",
 			statusCode: http.StatusTooManyRequests,
-			reason:     contractsai.FailoverReasonRateLimited,
+			reason:     defaultFailoverReasonRateLimited,
 			run: func(ctx context.Context, provider *Provider) error {
 				_, err := provider.PutFile(ctx, namedAttachment{kind: contractsai.AttachmentKindFile, filename: "report.txt", mimeType: "text/plain", content: []byte("report")})
 				return err
@@ -1566,7 +1566,7 @@ func TestProviderFileFailoverError(t *testing.T) {
 		{
 			name:       "get file insufficient credits",
 			statusCode: http.StatusPaymentRequired,
-			reason:     contractsai.FailoverReasonInsufficientCredits,
+			reason:     defaultFailoverReasonInsufficientCredits,
 			run: func(ctx context.Context, provider *Provider) error {
 				_, err := provider.GetFile(ctx, "file-123")
 				return err
@@ -1575,7 +1575,7 @@ func TestProviderFileFailoverError(t *testing.T) {
 		{
 			name:       "delete file provider overloaded",
 			statusCode: http.StatusServiceUnavailable,
-			reason:     contractsai.FailoverReasonProviderOverloaded,
+			reason:     defaultFailoverReasonProviderOverloaded,
 			run: func(ctx context.Context, provider *Provider) error {
 				return provider.DeleteFile(ctx, "file-123")
 			},

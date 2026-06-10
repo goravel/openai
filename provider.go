@@ -36,6 +36,12 @@ const DefaultMaleVoice = "ash"
 
 const providerStateResponseID = "openai.response_id"
 
+const (
+	defaultFailoverReasonRateLimited         contractsai.FailoverReason = "rate_limited"
+	defaultFailoverReasonInsufficientCredits contractsai.FailoverReason = "insufficient_credits"
+	defaultFailoverReasonProviderOverloaded  contractsai.FailoverReason = "provider_overloaded"
+)
+
 type Provider struct {
 	client        goopenai.Client
 	config        contractsai.ProviderConfig
@@ -350,11 +356,11 @@ func (r *Provider) failoverError(err error) error {
 	if stderrors.As(err, &openaiErr) {
 		switch openaiErr.StatusCode {
 		case http.StatusTooManyRequests:
-			return frameworkai.NewFailoverError(r.providerName(), contractsai.FailoverReasonRateLimited, err)
+			return frameworkai.NewFailoverError(r.providerName(), defaultFailoverReasonRateLimited, err)
 		case http.StatusPaymentRequired:
-			return frameworkai.NewFailoverError(r.providerName(), contractsai.FailoverReasonInsufficientCredits, err)
+			return frameworkai.NewFailoverError(r.providerName(), defaultFailoverReasonInsufficientCredits, err)
 		case http.StatusServiceUnavailable:
-			return frameworkai.NewFailoverError(r.providerName(), contractsai.FailoverReasonProviderOverloaded, err)
+			return frameworkai.NewFailoverError(r.providerName(), defaultFailoverReasonProviderOverloaded, err)
 		}
 	}
 
