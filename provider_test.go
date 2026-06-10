@@ -1161,17 +1161,6 @@ func (e providerTestError) Error() string {
 	return string(e)
 }
 
-func failoverRulesForTest(t *testing.T, reason contractsai.FailoverReason, pattern string) *frameworkai.FailoverRules {
-	t.Helper()
-
-	rules, err := frameworkai.NewFailoverRules("openai", map[contractsai.FailoverReason][]string{
-		reason: {pattern},
-	})
-	require.NoError(t, err)
-
-	return &rules
-}
-
 type providerStateStub struct{ data map[string]any }
 
 func (p *providerStateStub) Get(key string) any { return p.data[key] }
