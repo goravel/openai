@@ -2,12 +2,6 @@
 
 The OpenAI provider for `facades.AI()` of Goravel.
 
-## Version
-
-| goravel/openai | goravel/framework |
-|----------------|-------------------|
-| v1.18.x        | v1.18.x           |
-
 ## Install
 
 Run the command below in your project to install the package automatically:
