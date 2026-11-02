@@ -1077,6 +1077,26 @@ func TestProviderBuildInputIgnoresAttachmentsDuringToolContinuation(t *testing.T
 	assert.Equal(t, []normalizedMessage{{role: "tool", content: "result"}}, normalizeInputItems([]map[string]any{marshalInputItem(t, input[0])}))
 }
 
+func TestProviderBuildInputKeepsToolResultCallID(t *testing.T) {
+	mockAgent := mocksai.NewAgent(t)
+	mockAgent.EXPECT().Instructions().Return("").Once()
+	mockAgent.EXPECT().Messages().Return([]contractsai.Message{
+		{Role: contractsai.RoleUser, Content: "weather?"},
+		{Role: contractsai.RoleAssistant, ToolCalls: []contractsai.ToolCall{{ID: "call-1", Name: "lookup"}}},
+		{Role: contractsai.RoleToolResult, Content: "sunny", ToolCallID: "call-1"},
+	}).Once()
+
+	provider := &Provider{}
+	input, _, _, err := provider.buildInput(context.Background(), contractsai.AgentPrompt{Agent: mockAgent})
+	require.NoError(t, err)
+	require.Len(t, input, 3)
+
+	item := marshalInputItem(t, input[2])
+	assert.Equal(t, "function_call_output", item["type"])
+	assert.Equal(t, "call-1", item["call_id"])
+	assert.Equal(t, "sunny", item["output"])
+}
+
 func TestProviderPromptAndStreamSerializeAttachmentsTheSameWay(t *testing.T) {
 	attachments := []contractsai.Attachment{
 		frameworkai.ImageFromByte([]byte("image"), frameworkai.WithMimeType("image/png")),
