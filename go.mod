@@ -2,7 +2,7 @@ module github.com/goravel/openai
 
 go 1.25.0
 
-toolchain go1.26.3
+toolchain go1.27.3
 
 require (
 	github.com/goravel/framework v1.18.0
