@@ -1075,26 +1075,40 @@ func TestProviderBuildInputIgnoresAttachmentsDuringToolContinuation(t *testing.T
 	assert.Equal(t, "resp_prev", previousResponseID)
 	require.Len(t, input, 1)
 	assert.Equal(t, []normalizedMessage{{role: "tool", content: "result"}}, normalizeInputItems([]map[string]any{marshalInputItem(t, input[0])}))
+	assert.Equal(t, "call-1", marshalInputItem(t, input[0])["call_id"])
 }
 
 func TestProviderBuildInputKeepsToolResultCallID(t *testing.T) {
-	mockAgent := mocksai.NewAgent(t)
-	mockAgent.EXPECT().Instructions().Return("").Once()
-	mockAgent.EXPECT().Messages().Return([]contractsai.Message{
-		{Role: contractsai.RoleUser, Content: "weather?"},
-		{Role: contractsai.RoleAssistant, ToolCalls: []contractsai.ToolCall{{ID: "call-1", Name: "lookup"}}},
-		{Role: contractsai.RoleToolResult, Content: "sunny", ToolCallID: "call-1"},
-	}).Once()
+	tests := []struct {
+		name       string
+		toolCallID string
+		wantCallID string
+	}{
+		{name: "keeps a populated call id", toolCallID: "call-1", wantCallID: "call-1"},
+		{name: "keeps an empty call id", toolCallID: "", wantCallID: ""},
+	}
 
-	provider := &Provider{}
-	input, _, _, err := provider.buildInput(context.Background(), contractsai.AgentPrompt{Agent: mockAgent})
-	require.NoError(t, err)
-	require.Len(t, input, 3)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockAgent := mocksai.NewAgent(t)
+			mockAgent.EXPECT().Instructions().Return("").Once()
+			mockAgent.EXPECT().Messages().Return([]contractsai.Message{
+				{Role: contractsai.RoleUser, Content: "weather?"},
+				{Role: contractsai.RoleAssistant, ToolCalls: []contractsai.ToolCall{{ID: "call-1", Name: "lookup"}}},
+				{Role: contractsai.RoleToolResult, Content: "sunny", ToolCallID: tt.toolCallID},
+			}).Once()
 
-	item := marshalInputItem(t, input[2])
-	assert.Equal(t, "function_call_output", item["type"])
-	assert.Equal(t, "call-1", item["call_id"])
-	assert.Equal(t, "sunny", item["output"])
+			provider := &Provider{}
+			input, _, _, err := provider.buildInput(context.Background(), contractsai.AgentPrompt{Agent: mockAgent})
+			require.NoError(t, err)
+			require.Len(t, input, 3)
+
+			item := marshalInputItem(t, input[2])
+			assert.Equal(t, "function_call_output", item["type"])
+			assert.Equal(t, tt.wantCallID, item["call_id"])
+			assert.Equal(t, "sunny", item["output"])
+		})
+	}
 }
 
 func TestProviderPromptAndStreamSerializeAttachmentsTheSameWay(t *testing.T) {
