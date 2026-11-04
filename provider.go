@@ -636,7 +636,7 @@ func (r *Provider) buildInput(ctx context.Context, prompt contractsai.AgentPromp
 			}
 		case contractsai.RoleToolResult:
 			input = append(input, responses.ResponseInputItemUnionParam{OfFunctionCallOutput: &responses.ResponseInputItemFunctionCallOutputParam{
-				CallID: m.ToolCallID,
+				CallID: param.NewOpt(m.ToolCallID),
 				Output: responses.ResponseInputItemFunctionCallOutputOutputUnionParam{
 					OfString: param.NewOpt(m.Content),
 				},
@@ -667,7 +667,7 @@ func (r *Provider) buildToolResultInput(history []contractsai.Message) []respons
 		}
 
 		input = append(input, responses.ResponseInputItemUnionParam{OfFunctionCallOutput: &responses.ResponseInputItemFunctionCallOutputParam{
-			CallID: message.ToolCallID,
+			CallID: param.NewOpt(message.ToolCallID),
 			Output: responses.ResponseInputItemFunctionCallOutputOutputUnionParam{
 				OfString: param.NewOpt(message.Content),
 			},
