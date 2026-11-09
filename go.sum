@@ -126,8 +126,8 @@ github.com/mattn/go-sqlite3 v1.14.22 h1:2gZY6PC6kBnID23Tichd1K+Z0oS6nE/XwU+Vz/5o
 github.com/mattn/go-sqlite3 v1.14.22/go.mod h1:Uh1q+B4BYcTPb+yiD3kU8Ct7aC0hY9fxUwlHK0RXw+Y=
 github.com/muesli/termenv v0.16.0 h1:S5AlUN9dENB57rsbnkPyfdGuWIlkmzJjbFf0Tf5FWUc=
 github.com/muesli/termenv v0.16.0/go.mod h1:ZRfOIKPFDYQoDFF4Olj7/QJbW60Ol/kL1pU3VfY/Cnk=
-github.com/openai/openai-go/v3 v3.94.0 h1:i6g80zPCgwYRLf5lXyGnvhjXDs/2hXt7nDE7n7opevQ=
-github.com/openai/openai-go/v3 v3.94.0/go.mod h1:uMht5xIbHFTRAD05AiQXzNT9hJGklZHsCnyzeWiteGo=
+github.com/openai/openai-go/v3 v3.97.0 h1:kwaui9B6oP/Ezf+IQ8klNQy274B9cbZkBLwsEVo4rxs=
+github.com/openai/openai-go/v3 v3.97.0/go.mod h1:uMht5xIbHFTRAD05AiQXzNT9hJGklZHsCnyzeWiteGo=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pterm/pterm v0.12.27/go.mod h1:PhQ89w4i95rhgE+xedAoqous6K9X+r6aSOI2eFF7DZI=
 github.com/pterm/pterm v0.12.29/go.mod h1:WI3qxgvoQFFGKGjGnJR849gU0TsEOvKn5Q8LlY1U7lg=

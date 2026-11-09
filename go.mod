@@ -6,7 +6,7 @@ toolchain go1.27.3
 
 require (
 	github.com/goravel/framework v1.18.0
-	github.com/openai/openai-go/v3 v3.94.0
+	github.com/openai/openai-go/v3 v3.97.0
 	github.com/stretchr/testify v1.12.1
 )
 
